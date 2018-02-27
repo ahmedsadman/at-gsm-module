@@ -6,8 +6,9 @@ connection functionality and commands
 import logging
 import sys
 import time
-
 import serial
+import glob
+from threading import Thread
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +22,7 @@ class GSM(object):
         self.baud_rate = baud_rate
         self.port = None
         self.timeout = timeout
+        self.conn = None
 
     def find_port(self):
         """
@@ -34,22 +36,24 @@ class GSM(object):
         # for windows os
         if 'win' in sys.platform:
             ports = ['COM%s' % (i + 1) for i in range(255)]
-
-            for port in ports:
-                try:
-                    ser = serial.Serial(port, self.baud_rate, timeout=self.timeout)
-                    ser.close()
-                    logger.debug('Connected port: ' + port)
-                    self.port = port
-                    return port
-                except:
-                    pass
-
-            return None
-
+        elif 'linux' in sys.platform:
+            ports = glob.glob('/dev/ttyUSB*') + glob.glob('/dev/ttyACM*')
         else:
-            logger.error("non-windows version is not implemented")
-            raise NotImplementedError
+            logger.critical('Your OS is not supported')
+            ports = []
+
+        for port in ports:
+            try:
+                ser = serial.Serial(port, self.baud_rate, timeout=self.timeout)
+                ser.close()
+                logger.debug('Connected port: ' + port)
+                self.port = port
+                return port
+            except serial.serialutil.SerialException:
+                pass
+
+        logger.error('No port found')
+        return None
 
     def connect(self):
         """
@@ -58,9 +62,9 @@ class GSM(object):
         """
 
         port = self.find_port()
+        logger.debug('Establishing connection...')
         ser = serial.Serial(port, self.baud_rate, timeout=self.timeout)
         ser.write(b'AT\r\n')
-        time.sleep(2)
 
         response = ser.readlines()
         logger.debug('Response: ' + repr(response))
@@ -70,13 +74,46 @@ class GSM(object):
 
         if 'OK' in check:
             logger.debug('Serial device connected in port ' + self.port)
+            self.conn = ser
+            self.start_listener()
             return ser
         return None
 
-    def disconnect(self, ser):
-        if ser.is_open == True:
-            ser.close()
+    def disconnect(self):
+        if self.conn.is_open:
+            self.conn.close()
             logger.debug('Connection closed')
 
-    def listener(self, ser):
-        raise NotImplementedError
+    def listener(self):
+        """
+        A listener to read serial device response, should
+        be run in a thread
+        :return: None
+        """
+
+        if not self.conn.is_open:
+            logger.error('Serial device not connected')
+
+        while self.conn.is_open:
+            if self.conn.inWaiting() > 0:
+                response = self.conn.readlines()
+                logger.debug('Listener: ' + repr(response))
+            time.sleep(1)
+
+    def start_listener(self):
+        logger.debug('Starting non-blocking listener')
+        t = Thread(target=self.listener)
+        t.start()
+        logger.debug('Listening...')
+
+    def send(self, command):
+        """
+        send a command to the serial device
+        :param command: string
+        :return: None
+        """
+
+        command += '\r\n'
+        logger.debug('Sending command: ' + command)
+        command = command.encode()
+        self.conn.write(command)
