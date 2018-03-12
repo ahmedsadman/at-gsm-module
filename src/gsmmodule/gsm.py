@@ -15,14 +15,19 @@ logger = logging.getLogger(__name__)
 
 class GSM(object):
     """
-    The base GSM class, inherited by others
+    The base GSM class
     """
 
+    # borg pattern
+    _shared = {}
+
+    port = None
+    conn = None
+
     def __init__(self, baud_rate=115200, timeout=2):
+        self.__dict__ = self._shared
         self.baud_rate = baud_rate
-        self.port = None
         self.timeout = timeout
-        self.conn = None
 
     def find_port(self):
         """
