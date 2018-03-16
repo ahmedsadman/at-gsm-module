@@ -66,6 +66,9 @@ class GSM(object):
         :return: serial object
         """
 
+        if self.conn is not None:
+            return
+        
         port = self.find_port()
         logger.debug('Establishing connection...')
         ser = serial.Serial(port, self.baud_rate, timeout=self.timeout)
@@ -87,6 +90,7 @@ class GSM(object):
     def disconnect(self):
         if self.conn.is_open:
             self.conn.close()
+            self.conn = None
             logger.debug('Connection closed')
 
     def listener(self):
@@ -104,6 +108,8 @@ class GSM(object):
                 response = self.conn.readlines()
                 logger.debug('Listener: ' + repr(response))
             time.sleep(1)
+            if self.conn is None:
+                return
 
     def start_listener(self):
         logger.debug('Starting non-blocking listener')
@@ -118,7 +124,10 @@ class GSM(object):
         :return: None
         """
 
-        command += '\r\n'
+        command += '\r'
         logger.debug('Sending command: ' + command)
         command = command.encode()
         self.conn.write(command)
+
+    def send_ussd(self, code):
+        self.send('AT+CUSD=1,' + '"' + code + '"')

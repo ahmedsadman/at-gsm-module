@@ -9,6 +9,7 @@ __author__ = 'Seym, Samyo'
 
 import logging
 from gsmmodule.gsm import GSM
+from gsmmodule.sms import SMS
 
 # logger
 # ---------------------------
